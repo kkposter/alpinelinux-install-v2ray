@@ -140,7 +140,7 @@ install_confdir() {
     if [ ! -d '/usr/local/etc/v2ray/' ]; then
         install -d /usr/local/etc/v2ray/
 
-	curl -o "${TMP_DIRECTORY}config.json" https://raw.githubusercontent.com/kkposter/alpinelinux-install-v2ray/master/config.conf -s
+	curl -o "${TMP_DIRECTORY}config.json" https://raw.githubusercontent.com/kkposter/alpinelinux-install-v2ray/master/config.json -s
         if [ "$?" -eq '0' ]; then
             cp ${TMP_DIRECTORY}config.json /usr/local/etc/v2ray/
         fi
