@@ -2,6 +2,17 @@
 
 set -euxo pipefail
 
+VERSION="latest"
+verparm="5.1.0"
+
+if [ $# -eq 0 ]
+then
+    echo "No arguments provided.Use latest version"
+else
+    verparm=$1
+fi
+
+
 # Identify architecture
 case "$(arch -s)" in
     'i386' | 'i686')
@@ -74,6 +85,11 @@ install_software() {
 }
 
 download_v2ray() {
+    if [ -n "$verparm" ]; then
+	    VERSION=v$verparm
+        DOWNLOAD_LINK="https://github.com/v2fly/v2ray-core/releases/download/${VERSION}/v2ray-linux-$MACHINE.zip"
+    fi
+
     curl -L -H 'Cache-Control: no-cache' -o "$ZIP_FILE" "$DOWNLOAD_LINK" -#
     if [ "$?" -ne '0' ]; then
         echo 'error: Download failed! Please check your network or try again.'
@@ -87,7 +103,7 @@ download_v2ray() {
 }
 
 verification_v2ray() {
-    for LISTSUM in 'md5' 'sha1' 'sha256' 'sha512'; do
+    for LISTSUM in 'md5' 'sha1'; do
         SUM="$(${LISTSUM}sum $ZIP_FILE | sed 's/ .*//')"
         CHECKSUM="$(grep $(echo $LISTSUM | tr [:lower:] [:upper:]) $ZIP_FILE.dgst | uniq | sed 's/.* //')"
         if [ "$SUM" != "$CHECKSUM" ]; then
@@ -111,7 +127,9 @@ is_it_running() {
 
 install_v2ray() {
     install -m 755 "${TMP_DIRECTORY}v2ray" "/usr/local/bin/v2ray"
-    install -m 755 "${TMP_DIRECTORY}v2ctl" "/usr/local/bin/v2ctl"
+    if [ -e "${TMP_DIRECTORY}v2ctl" ]; then
+	install -m 755 "${TMP_DIRECTORY}v2ctl" "/usr/local/bin/v2ctl"	
+    fi
     install -d /usr/local/lib/v2ray/
     install -m 755 "${TMP_DIRECTORY}geoip.dat" "/usr/local/lib/v2ray/geoip.dat"
     install -m 755 "${TMP_DIRECTORY}geosite.dat" "/usr/local/lib/v2ray/geosite.dat"
@@ -121,9 +139,12 @@ install_confdir() {
     CONFDIR='0'
     if [ ! -d '/usr/local/etc/v2ray/' ]; then
         install -d /usr/local/etc/v2ray/
-        for BASE in 00_log 01_api 02_dns 03_routing 04_policy 05_inbounds 06_outbounds 07_transport 08_stats 09_reverse; do
-            echo '{}' > "/usr/local/etc/v2ray/$BASE.json"
-        done
+
+	curl -o "${TMP_DIRECTORY}config.json" https://raw.githubusercontent.com/kkposter/alpinelinux-install-v2ray/master/config.conf -s
+        if [ "$?" -eq '0' ]; then
+            cp ${TMP_DIRECTORY}config.json /usr/local/etc/v2ray/
+        fi
+
         CONFDIR='1'
     fi
 }
@@ -142,11 +163,19 @@ install_startup_service_file() {
     OPENRC='0'
     if [ ! -f '/etc/init.d/v2ray' ]; then
         mkdir "${TMP_DIRECTORY}init.d/"
-        curl -o "${TMP_DIRECTORY}init.d/v2ray" https://raw.githubusercontent.workers.dev/v2fly/alpinelinux-install-v2ray/master/init.d/v2ray -s
+        curl -o "${TMP_DIRECTORY}init.d/v2ray" https://raw.githubusercontent.com/kkposter/alpinelinux-install-v2ray/master/init.d/v2ray -s
         if [ "$?" -ne '0' ]; then
             echo 'error: Failed to start service file download! Please check your network or try again.'
             exit 1
         fi
+	
+	first_char=${verparm:0:1}     # ��ȡ�汾�ŵ���λ�ַ�
+	if [ "$first_char" -gt "4" ]
+	then
+	    sed -e 's/\-confdir \$confdir/run \-confdir \$confdir/g' -e 's/\-test \$command_args/test \-confdir \$confdir/g' ${TMP_DIRECTORY}init.d/v2ray > ${TMP_DIRECTORY}init.d/v2ray.tmp
+        cp ${TMP_DIRECTORY}init.d/v2ray.tmp ${TMP_DIRECTORY}init.d/v2ray
+	fi
+
         install -m 755 "${TMP_DIRECTORY}init.d/v2ray" /etc/init.d/v2ray
         OPENRC='1'
     fi
@@ -158,16 +187,7 @@ information() {
     echo 'installed: /usr/local/lib/v2ray/geoip.dat'
     echo 'installed: /usr/local/lib/v2ray/geosite.dat'
     if [ "$CONFDIR" -eq '1' ]; then
-        echo 'installed: /usr/local/etc/v2ray/00_log.json'
-        echo 'installed: /usr/local/etc/v2ray/01_api.json'
-        echo 'installed: /usr/local/etc/v2ray/02_dns.json'
-        echo 'installed: /usr/local/etc/v2ray/03_routing.json'
-        echo 'installed: /usr/local/etc/v2ray/04_policy.json'
-        echo 'installed: /usr/local/etc/v2ray/05_inbounds.json'
-        echo 'installed: /usr/local/etc/v2ray/06_outbounds.json'
-        echo 'installed: /usr/local/etc/v2ray/07_transport.json'
-        echo 'installed: /usr/local/etc/v2ray/08_stats.json'
-        echo 'installed: /usr/local/etc/v2ray/09_reverse.json'
+        echo 'installed: /usr/local/etc/v2ray/config.json'
     fi
     if [ "$LOG" -eq '1' ]; then
         echo 'installed: /var/log/v2ray/'
